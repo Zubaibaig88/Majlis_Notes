@@ -116,6 +116,8 @@ async function getPrompts() {
 }
 const getShares = () => readJSON(path.join(DATA, "shares.json"), {});
 const getSettings = () => readJSON(path.join(DATA, "settings.json"), { slackWebhook: "", webhookUrl: "", autoSummary: true, language: "auto" });
+const getSpaces = () => readJSON(path.join(DATA, "spaces.json"), { default: { id: "default", name: "My Meetings", description: "", color: "#6366f1" } });
+const saveSpaces = (s) => writeJSON(path.join(DATA, "spaces.json"), s);
 
 /* Pull screenshots out of the meeting JSON into image files. */
 async function extractShots(m) {
@@ -132,7 +134,7 @@ async function extractShots(m) {
 
 /* Merge an incoming copy from the extension with the server copy. */
 function mergeMeeting(old, inc) {
-  if (!old) return { ...inc, ai: [], tags: inc.tags || [], comments: [], createdAt: new Date().toISOString() };
+  if (!old) return { ...inc, ai: [], tags: inc.tags || [], comments: [], spaceId: "default", createdAt: new Date().toISOString() };
   const byId = new Map((old.entries || []).map((e) => [e.id, e]));
   const entries = (inc.entries || []).map((e) => {
     const o = byId.get(e.id);
@@ -154,6 +156,7 @@ function mergeMeeting(old, inc) {
     participants: Array.from(new Set([...(old.participants || []), ...(inc.participants || [])])),
     tags: old.tags || [],
     folder: old.folder,
+    spaceId: old.spaceId || "default",
     notes: old.notesLocked ? old.notes : inc.notes || old.notes,
     notesLocked: old.notesLocked,
     ai: old.ai || [],
@@ -396,6 +399,7 @@ route("PATCH", "/api/meetings/:id", async (req, p) => {
   if (typeof b.title === "string") (m.title = b.title.trim() || m.title), (m.titleLocked = true);
   if (Array.isArray(b.tags)) m.tags = Array.from(new Set(b.tags.map((t) => String(t).trim()).filter(Boolean))).slice(0, 30);
   if (typeof b.folder === "string") m.folder = b.folder.trim();
+  if (typeof b.spaceId === "string") m.spaceId = b.spaceId.trim() || "default";
   if (typeof b.notes === "string") (m.notes = b.notes), (m.notesLocked = true);
   if (b.renameSpeaker && b.renameSpeaker.from && b.renameSpeaker.to) {
     for (const e of m.entries) if (e.speaker === b.renameSpeaker.from) (e.speaker = b.renameSpeaker.to.trim()), (e.srvEdit = true);
@@ -625,7 +629,38 @@ route("GET", "/api/stats", async () => {
     topSpeakers: Object.entries(speakers).sort((a, b) => b[1] - a[1]).slice(0, 8),
     tags: Array.from(new Set(all.flatMap((m) => m.tags || []))).sort(),
     folders: Array.from(new Set(all.map((m) => m.folder).filter(Boolean))).sort(),
+    spaces: getSpaces(),
   };
+});
+
+route("GET", "/api/spaces", async () => getSpaces());
+route("POST", "/api/spaces", async (req) => {
+  const b = await readJSONBody(req);
+  const spaces = await getSpaces();
+  const id = crypto.randomUUID();
+  spaces[id] = { id, name: String(b.name || "New space").slice(0, 80), description: String(b.description || "").slice(0, 200), color: String(b.color || "#6366f1"), createdAt: new Date().toISOString() };
+  await saveSpaces(spaces);
+  return spaces[id];
+});
+route("PATCH", "/api/spaces/:id", async (req, p) => {
+  const b = await readJSONBody(req);
+  const spaces = await getSpaces();
+  if (!spaces[p.id]) throw httpError(404, "Space not found");
+  if (typeof b.name === "string") spaces[p.id].name = b.name.slice(0, 80);
+  if (typeof b.description === "string") spaces[p.id].description = b.description.slice(0, 200);
+  if (typeof b.color === "string") spaces[p.id].color = b.color;
+  await saveSpaces(spaces);
+  return spaces[p.id];
+});
+route("DELETE", "/api/spaces/:id", async (req, p) => {
+  if (p.id === "default") throw httpError(400, "Cannot delete default space");
+  const spaces = await getSpaces();
+  delete spaces[p.id];
+  // Move meetings from deleted space to default
+  const all = await listMeetings();
+  for (const m of all) if (m.spaceId === p.id) { m.spaceId = "default"; await saveMeeting(m); }
+  await saveSpaces(spaces);
+  return { ok: true };
 });
 
 route("POST", "/api/upload", async (req, p, url) => {
@@ -650,6 +685,7 @@ route("POST", "/api/upload", async (req, p, url) => {
     tags: ["upload"],
     ai: [],
     comments: [],
+    spaceId: "default",
     createdAt: startedAt,
   };
   await saveMeeting(m);

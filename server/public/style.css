@@ -100,6 +100,39 @@ main { padding: 28px 36px 60px; min-width: 0; background: var(--soft); }
 .line { display: grid; grid-template-columns: 34px 1fr; gap: 10px; padding: 9px 8px; border-radius: 10px; position: relative; }
 .line:hover { background: var(--soft); }
 .line.hl { background: var(--gold-soft); }
+
+/* Meeting detail page - new Tactiq-style layout */
+.mpage { display: grid; grid-template-columns: 1fr 320px; gap: 24px; align-items: start; }
+.mpage-main { min-width: 0; }
+.mpage-head { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.mpage-head h1 { margin: 0 0 12px; font-size: 28px; font-weight: 700; outline: none; border-radius: 6px; }
+.mpage-head h1:focus { background: var(--soft); }
+.mpage-head .meta { color: var(--muted); display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; margin-bottom: 14px; }
+.mpage-head .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin-bottom: 16px; background: var(--panel); border-radius: var(--radius) var(--radius) 0 0; }
+.tabs .tab { padding: 12px 16px; border: none; background: transparent; color: var(--muted); font-weight: 500; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; }
+.tabs .tab:hover { color: var(--ink); }
+.tabs .tab.on { color: var(--primary); border-bottom-color: var(--primary); }
+.tab-content { background: var(--panel); border: 1px solid var(--line); border-radius: 0 0 var(--radius) var(--radius); border-top: none; padding: 16px; }
+
+.mpage-side { position: sticky; top: 28px; }
+.mpage-side .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.mpage-side .panel h6 { margin: 0 0 12px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.mpage-side .info-row { display: flex; gap: 8px; align-items: start; margin-bottom: 10px; font-size: 13px; }
+.mpage-side .info-row b { color: var(--muted); min-width: 60px; }
+.mpage-side .participants { display: flex; flex-wrap: wrap; gap: 6px; }
+.mpage-side .space-selector { padding: 10px; background: var(--soft); border: 1px solid var(--line); border-radius: 6px; font-size: 13px; cursor: pointer; margin-bottom: 10px; }
+.mpage-side .space-selector:hover { background: var(--line); }
+
+.notes-area { min-height: 120px; padding: 12px; background: var(--soft); border: 1px solid var(--line); border-radius: 6px; font-family: inherit; font-size: 14px; resize: vertical; }
+.notes-area:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+
+.comments-list { display: flex; flex-direction: column; gap: 12px; max-height: 400px; overflow-y: auto; padding: 8px 0; }
+.comment { padding: 10px; background: var(--soft); border-radius: 6px; font-size: 13px; }
+.comment b { color: var(--primary); }
+.comment .time { color: var(--muted); font-size: 11px; }
+
+@media (max-width: 1200px) { .mpage { grid-template-columns: 1fr; } .mpage-side { position: static; } }
 .line .who { display: flex; gap: 8px; align-items: baseline; font-size: 13px; }
 .line .who b { cursor: pointer; }
 .line .ts { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
