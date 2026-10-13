@@ -2,7 +2,7 @@
 const { esc, fmtOffset, fmtDuration, colorFor, initials, md, speakerStats } = FN;
 const $ = (s, r = document) => r.querySelector(s);
 const view = $("#view");
-const state = { tag: "", folder: "", q: "", prompts: [], current: null };
+const state = { tag: "", folder: "", space: "", q: "", prompts: [], current: null };
 
 /* ---------------- API ---------------- */
 const getKey = () => {
@@ -95,9 +95,21 @@ window.addEventListener("hashchange", router);
 /* ---------------- Sidebar ---------------- */
 async function loadSidebar() {
   const s = await api("/api/stats");
+
+  // Spaces
+  const spacesList = Object.values(s.spaces || {});
+  if ($("#spaces")) {
+    $("#spaces").innerHTML = spacesList.length
+      ? spacesList.map((sp) => `<span class="chip ${state.space === sp.id ? "on" : ""}" data-space="${esc(sp.id)}" title="${esc(sp.description || "")}">📂 ${esc(sp.name)}</span>`).join("")
+      : `<span style="padding:0 10px;font-size:12px;color:#8f9ab4">No spaces yet</span>`;
+  }
+
+  // Folders
   $("#folders").innerHTML = s.folders.length
     ? s.folders.map((f) => `<span class="chip ${state.folder === f ? "on" : ""}" data-folder="${esc(f)}">📁 ${esc(f)}</span>`).join("")
     : `<span style="padding:0 10px;font-size:12px;color:#8f9ab4">No folders yet</span>`;
+
+  // Tags
   $("#tags").innerHTML = s.tags.length
     ? s.tags.map((t) => `<span class="chip ${state.tag === t ? "on" : ""}" data-tag="${esc(t)}"># ${esc(t)}</span>`).join("")
     : `<span style="padding:0 10px;font-size:12px;color:#8f9ab4">No tags yet</span>`;
@@ -106,8 +118,10 @@ async function loadSidebar() {
 document.addEventListener("click", (e) => {
   const f = e.target.closest("[data-folder]");
   const t = e.target.closest("[data-tag]");
+  const sp = e.target.closest("[data-space]");
   if (f && f.closest(".side")) (state.folder = state.folder === f.dataset.folder ? "" : f.dataset.folder), (location.hash = "#/"), router();
   if (t && t.closest(".side")) (state.tag = state.tag === t.dataset.tag ? "" : t.dataset.tag), (location.hash = "#/"), router();
+  if (sp && sp.closest(".side")) (state.space = state.space === sp.dataset.space ? "" : sp.dataset.space), (location.hash = "#/"), router();
 });
 
 /* ---------------- Home ---------------- */
@@ -142,11 +156,12 @@ async function loadList() {
   if (state.q) p.set("q", state.q);
   if (state.tag) p.set("tag", state.tag);
   if (state.folder) p.set("folder", state.folder);
-  const filters = [state.tag && `# ${state.tag}`, state.folder && `📁 ${state.folder}`].filter(Boolean);
+  if (state.space) p.set("space", state.space);
+  const filters = [state.space && `📂 Space: ${state.space}`, state.tag && `# ${state.tag}`, state.folder && `📁 ${state.folder}`].filter(Boolean);
   $("#filters").innerHTML = filters.length
     ? `<div style="margin-bottom:10px">Showing ${filters.map((f) => `<span class="chip gold">${esc(f)}</span>`).join(" ")} <button class="btn sm" id="clearf">Clear</button></div>`
     : "";
-  $("#clearf") && ($("#clearf").onclick = () => ((state.tag = state.folder = ""), pageHome()));
+  $("#clearf") && ($("#clearf").onclick = () => ((state.tag = state.folder = state.space = ""), pageHome()));
   const { meetings } = await api("/api/meetings?" + p);
   const list = $("#list");
   if (!list) return;

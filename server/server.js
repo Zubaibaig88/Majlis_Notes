@@ -348,11 +348,13 @@ route("GET", "/api/meetings", async (req, p, url) => {
   const q = (url.searchParams.get("q") || "").toLowerCase().trim();
   const tag = url.searchParams.get("tag") || "";
   const folder = url.searchParams.get("folder") || "";
+  const space = url.searchParams.get("space") || "";
   const all = await listMeetings();
   const out = [];
   for (const m of all) {
     if (tag && !(m.tags || []).includes(tag)) continue;
     if (folder && (m.folder || "") !== folder) continue;
+    if (space && (m.spaceId || "default") !== space) continue;
     let hit = null;
     if (q) {
       if ((m.title || "").toLowerCase().includes(q)) hit = { title: true };
