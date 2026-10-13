@@ -48,6 +48,8 @@ main { padding: 28px 36px 60px; min-width: 0; background: var(--soft); }
 .btn.secondary:hover { background: #c7d2fe; }
 .btn.danger { color: var(--red); border-color: var(--red); }
 .btn.danger:hover { background: #fee2e2; }
+.btn.gold { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.btn.gold:hover { background: var(--purple); border-color: var(--purple); }
 .btn.sm { padding: 6px 10px; font-size: 13px; }
 .btn:disabled { opacity: .5; cursor: default; }
 
