@@ -131,6 +131,54 @@
     }
   }
 
+  /* ---------- audio capture ---------- */
+  let audioStream = null;
+  let audioContext = null;
+  let processor = null;
+
+  async function startAudioCapture() {
+    try {
+      // Try to capture system audio (screen + audio)
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        audio: true,
+        video: false,
+      });
+      audioStream = displayStream;
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(displayStream);
+
+      // Create a processor to send audio chunks to the server
+      processor = audioContext.createScriptProcessor(4096, 1, 1);
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      processor.onaudioprocess = (e) => {
+        if (paused || !meeting) return;
+        const audioData = e.inputBuffer.getChannelData(0);
+        const pcm = new Int16Array(audioData.length);
+        for (let i = 0; i < audioData.length; i++) {
+          pcm[i] = Math.max(-1, Math.min(1, audioData[i])) * 0x7FFF;
+        }
+        send({ type: "fn:audioChunk", meetingId: meeting.id, audio: Array.from(pcm) });
+      };
+
+      // Stop audio capture when stream ends
+      displayStream.getTracks().forEach((track) => {
+        track.onended = () => stopAudioCapture();
+      });
+    } catch (e) {
+      // User cancelled or audio not available - continue with captions only
+      console.log("Audio capture not available:", e.message);
+    }
+  }
+
+  function stopAudioCapture() {
+    if (processor) processor.disconnect();
+    if (audioContext) audioContext.close();
+    if (audioStream) audioStream.getTracks().forEach((t) => t.stop());
+    audioStream = null;
+  }
+
   /* ---------- meeting lifecycle ---------- */
   function startMeeting() {
     meeting = {
@@ -152,12 +200,15 @@
     captionTries = 0;
     lastCaptionAt = Date.now();
     buildPanel();
+    // Start audio capture first
+    startAudioCapture();
     adapter.enableCaptions();
     scheduleSave();
   }
 
   function endMeeting() {
     if (!meeting) return;
+    stopAudioCapture();
     meeting.endedAt = new Date().toISOString();
     saveNow(true);
     setStatus("ended");

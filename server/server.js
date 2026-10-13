@@ -472,6 +472,88 @@ route("POST", "/api/meetings/:id/push", async (req, p) => {
   return { results: await pushIntegrations(m, b.target) };
 });
 
+/* Audio chunk buffer for streaming transcription */
+const audioBuffers = new Map(); // meetingId -> { chunks: [], processing: false }
+
+route("POST", "/api/meetings/:id/audio", async (req, p) => {
+  if (!DEEPGRAM_API_KEY) throw httpError(400, "Audio transcription is not configured. Add DEEPGRAM_API_KEY to .env");
+  const m = await getMeeting(p.id);
+  if (!m) throw httpError(404, "Meeting not found");
+  const b = await readJSONBody(req);
+  if (!Array.isArray(b.audio)) throw httpError(400, "Audio data required");
+
+  // Buffer the audio chunk
+  if (!audioBuffers.has(p.id)) {
+    audioBuffers.set(p.id, { chunks: [], processing: false });
+  }
+  const buf = audioBuffers.get(p.id);
+  buf.chunks.push(new Uint8Array(b.audio));
+
+  // If we have enough audio (e.g., 0.5 seconds = 44100 samples), transcribe
+  const totalSamples = buf.chunks.reduce((n, c) => n + c.length, 0);
+  if (totalSamples > 22050 && !buf.processing) {
+    buf.processing = true;
+    setImmediate(async () => {
+      try {
+        const pcmBuffer = Buffer.concat(buf.chunks);
+        buf.chunks = [];
+
+        // Send to Deepgram for transcription
+        const deepgRes = await fetch("https://api.deepgram.com/v1/listen?model=" + DEEPGRAM_MODEL, {
+          method: "POST",
+          headers: {
+            "Authorization": "Token " + DEEPGRAM_API_KEY,
+            "Content-Type": "audio/raw;encoding=linear16;sample_rate=44100",
+          },
+          body: pcmBuffer,
+        });
+        if (!deepgRes.ok) {
+          console.error("Deepgram error:", deepgRes.status, await deepgRes.text());
+          buf.processing = false;
+          return;
+        }
+        const dgData = await deepgRes.json();
+        const transcript = dgData.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
+        if (!transcript) {
+          buf.processing = false;
+          return;
+        }
+
+        // Add the transcription as an entry in the meeting
+        const m = await getMeeting(p.id);
+        if (m && transcript.trim()) {
+          const lastEntry = m.entries[m.entries.length - 1];
+          const lastSpeaker = (dgData.results?.channels?.[0]?.alternatives?.[0]?.paragraphs?.[0]?.sentences?.[0]?.speaker || lastEntry?.speaker || "Speaker").trim();
+
+          // If same speaker and recent, append to last entry
+          if (lastEntry && lastEntry.speaker === lastSpeaker && Date.now() - new Date(lastEntry.at) < 5000) {
+            lastEntry.text = (lastEntry.text || "") + " " + transcript;
+            lastEntry.text = lastEntry.text.trim();
+          } else {
+            m.entries.push({
+              id: crypto.randomUUID(),
+              speaker: lastSpeaker,
+              text: transcript,
+              t: Date.now() - new Date(m.startedAt),
+              at: new Date().toISOString(),
+              highlight: false,
+              note: "",
+            });
+          }
+          m.updatedAt = new Date().toISOString();
+          await saveMeeting(m);
+        }
+      } catch (e) {
+        console.error("Audio transcription error:", e.message);
+      } finally {
+        buf.processing = false;
+      }
+    });
+  }
+
+  return { ok: true };
+});
+
 route(
   "GET",
   "/api/share/:sid",

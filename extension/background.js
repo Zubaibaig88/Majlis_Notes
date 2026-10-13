@@ -153,6 +153,21 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
           await retryUnsynced();
           return reply({ ok: true });
 
+        case "fn:audioChunk": {
+          // Send audio chunks to server for transcription
+          try {
+            await api(`/api/meetings/${msg.meetingId}/audio`, {
+              method: "POST",
+              body: JSON.stringify({ audio: msg.audio }),
+              headers: { "content-type": "application/json" },
+            });
+          } catch (e) {
+            // Log but don't fail - audio transcription is best-effort
+            console.log("Audio upload error:", e.message);
+          }
+          return reply({ ok: true });
+        }
+
         case "fn:ping":
           return reply({ ok: true, server: await api("/api/health") });
 
