@@ -63,20 +63,38 @@ To check everything works: `npm test` (23 checks).
 
 ## Dashboard features
 
+**Meetings & Organization:**
 - All meetings, grouped by date, with search across titles, transcripts and AI notes
 - Stats: meetings this week, hours in meetings, words transcribed
-- Folders and tags
-- Meeting page: full transcript, filter by speaker, highlights only, fix wrong words, rename a speaker everywhere, comment on lines, delete lines, screenshots
-- **Who talked most** — talk-time per speaker
+- **Spaces** — collections to organize meetings by project, client, or team
+- Folders and tags for additional organization
+- Filter meetings by space, folder, or tag
+
+**Meeting Detail Page (Tactiq-style):**
+- **Tabbed interface**: Transcript, AI, Notes & Comments
+- **Right sidebar** with meeting metadata, speaker stats, and space selector
+- Full transcript with speaker filtering, highlights, word corrections
+- **Who talked most** — visual talk-time per speaker
+- **Comment & Notes** — add comments with timestamps, keep private notes (AI reads them)
+- Screenshots integrated into transcript
+
+**AI & Analysis:**
 - 10 built-in AI prompts (summary, action items, decisions, follow-up email, minutes, Q&A, sales call, interview scorecard, highlights, **summary in Arabic**)
-- **Your own prompts**, grouped in kits (e.g. "Aymakan → Traction meeting notes")
-- **Ask anything** about a meeting
-- Private notes per meeting (the AI reads them too)
+- **Your own prompts**, grouped in kits
+- **Ask anything** about a meeting — custom questions and follow-ups
+- AI notes with copy and delete options
+
+**Integration & Sharing:**
+- **Google Calendar sync** — auto-add meetings to your calendar (configure in Settings)
 - Share links (pick transcript and/or AI notes; turn off any time)
 - Export: Word (.doc), Markdown (Notion/Obsidian), .txt, subtitles (.srt), JSON, or copy straight into Google Docs
-- Send to Slack, any webhook (Zapier / Make / n8n → Notion, HubSpot, Jira, Trello…), or email
+- Send to Slack, any webhook (Zapier / Make / n8n), or email
 - Upload a recording (MP3, M4A, WAV, MP4…) to get a transcript and summary
+
+**UI & Experience:**
 - Light and dark mode, works on phone
+- Modern Tactiq-inspired design with clean grid layout
+- Real-time search and filtering
 
 ## Where data lives
 
@@ -97,10 +115,20 @@ Any host that runs Node works (Render, Railway, Fly.io, a small VPS, etc.):
 - Caption quality (including Arabic) depends on the meeting app. Set the caption language in Meet to Arabic for Arabic meetings.
 - Tell people when you transcribe. Recording or transcribing calls can need consent under local law and company policy.
 
-## Plan for next versions
+## Recently added (v2)
+
+- [x] **Tactiq-style redesign** — modern grid layout with tabbed interface and sidebar
+- [x] **Spaces/Collections** — organize meetings by project, client, or team
+- [x] **Google Calendar integration** — auto-sync meetings to your calendar with OAuth
+- [x] **Comment threads** — add timestamped comments to meetings
+- [x] **Space filtering** — quickly find meetings by space in sidebar
+- [x] **Enhanced UI** — Tactiq-inspired design with improved visual hierarchy
+
+## Plan for future versions
 
 - [ ] Login for a team (several users, shared meetings)
 - [ ] Direct Google Docs / Notion / HubSpot connections (today: via webhook)
-- [ ] Calendar link: auto-name meetings from Google Calendar
+- [ ] Calendar event enrichment: fetch meeting details from Google Calendar
 - [ ] Own audio capture (so it works even when captions are off) and mixed Arabic/English speech-to-text
+- [ ] Mobile app for iOS/Android
 - [ ] Publish to the Chrome Web Store
