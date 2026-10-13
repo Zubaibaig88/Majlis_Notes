@@ -1,0 +1,5 @@
+server/data/
+server/.env
+node_modules/
+*.tmp
+.DS_Store

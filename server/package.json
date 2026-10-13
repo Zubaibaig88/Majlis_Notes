@@ -1,0 +1,9 @@
+{
+  "name": "majlis-notes-server",
+  "version": "1.0.0",
+  "description": "Majlis Notes meeting transcript server and dashboard",
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "test": "node test.js" },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED"
+}

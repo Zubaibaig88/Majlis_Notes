@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Shared meeting · Majlis Notes</title>
+<link rel="icon" href="/favicon.png">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 60px; }
+  .bar { height: auto; background: none; }
+  .topbar { display:flex; align-items:center; gap:10px; margin-bottom: 18px; }
+  .topbar .logo { width:30px; height:30px; border-radius:8px; background:var(--gold); color:var(--navy); font-weight:800; display:grid; place-items:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar"><span class="logo">م</span><b>Majlis Notes</b><span style="color:var(--muted)">· shared meeting</span></div>
+  <div id="v"><div class="loading"><span class="spin"></span>Loading…</div></div>
+</div>
+<script src="/common.js"></script>
+<script>
+(async () => {
+  const { esc, fmtOffset, fmtDuration, colorFor, initials, md, speakerStats } = FN;
+  const v = document.getElementById("v");
+  const sid = location.pathname.split("/").pop();
+  const res = await fetch("/api/share/" + encodeURIComponent(sid));
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { v.innerHTML = `<div class="empty"><b>Link not available</b>${esc(data.error || "")}</div>`; return; }
+  const m = data.meeting;
+  document.title = m.title + " · Majlis Notes";
+  const stats = speakerStats(m.entries);
+  const dur = m.endedAt ? new Date(m.endedAt) - new Date(m.startedAt) : 0;
+  v.innerHTML = `
+    <div class="mhead"><h1>${esc(m.title)}</h1>
+      <div class="meta"><span>📅 ${new Date(m.startedAt).toLocaleString(undefined,{dateStyle:"full",timeStyle:"short"})}</span>
+      ${dur ? `<span>⏱ ${fmtDuration(dur)}</span>` : ""}<span>${esc(m.platformName||"")}</span>
+      <span>👥 ${esc((m.participants && m.participants.length ? m.participants : stats.map(s=>s.speaker)).join(", "))}</span></div></div>
+    <div class="grid2">
+      <div class="card tr">${m.entries.length ? `<div class="lines">${m.entries.map(e => {
+        const shot = typeof e.screenshot === "number" && m.screenshots[e.screenshot];
+        return `<div class="line ${e.highlight?"hl":""}"><span class="av" style="margin:0;background:${e.speaker.startsWith("📷")?"#64748b":colorFor(e.speaker)}">${e.speaker.startsWith("📷")?"📷":esc(initials(e.speaker))}</span>
+          <div><div class="who"><b style="color:${colorFor(e.speaker)}">${esc(e.speaker)}</b><span class="ts">${fmtOffset(e.t)}</span></div>
+          ${shot && shot.url ? `<img class="shot" src="${esc(shot.url)}">` : `<div class="txt">${esc(e.text)}</div>`}</div></div>`;
+      }).join("")}</div>` : `<div class="empty">The transcript is not shared.</div>`}</div>
+      <div class="side-col">
+        ${(m.ai||[]).map(a => `<div class="card"><h3>${esc(a.name)}</h3><div class="md">${md(a.text)}</div></div>`).join("") || ""}
+        ${stats.length ? `<div class="card"><h3>👥 Who talked most</h3><div class="bars">${stats.map(s=>`<div class="row"><span>${esc(s.speaker)}</span><div class="bar"><i style="width:${s.pct}%;background:${colorFor(s.speaker)}"></i></div><span class="pct">${s.pct}%</span></div>`).join("")}</div></div>` : ""}
+      </div>
+    </div>`;
+})();
+</script>
+</body>
+</html>
