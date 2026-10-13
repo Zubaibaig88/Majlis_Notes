@@ -260,7 +260,15 @@ async function pageMeeting(id) {
         <div class="tab-content" id="tab-notes" style="display:none">
           <h3 style="margin:0 0 12px;font-size:15px;font-weight:600">📝 My Notes</h3>
           <textarea class="notes" id="notes" placeholder="Private notes — the AI reads these too." style="width:100%;min-height:120px;padding:10px;border:1px solid var(--line);border-radius:6px;font-family:inherit;font-size:14px;resize:vertical">${esc(m.notes || "")}</textarea>
-          ${(m.comments || []).length ? `<div style="margin-top:20px"><h3 style="margin:0 0 12px;font-size:15px;font-weight:600">💬 Comments</h3><div style="display:flex;flex-direction:column;gap:12px">${m.comments.map((c) => `<div style="padding:10px;background:var(--soft);border-radius:6px;font-size:13px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><b>${esc(c.author)}</b><small style="color:var(--muted)">${new Date(c.at).toLocaleString()}</small></div><p style="margin:0">${esc(c.text)}</p></div>`).join("")}</div></div>` : ""}
+
+          <div style="margin-top:24px">
+            <h3 style="margin:0 0 12px;font-size:15px;font-weight:600">💬 Comments</h3>
+            <form id="comment-form" style="display:flex;gap:8px;margin-bottom:16px">
+              <input type="text" id="comment-text" placeholder="Add a comment…" style="flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-size:14px">
+              <button type="submit" class="btn primary" style="padding:8px 16px">Post</button>
+            </form>
+            ${(m.comments || []).length ? `<div style="display:flex;flex-direction:column;gap:12px">${m.comments.map((c) => `<div style="padding:10px;background:var(--soft);border-radius:6px;font-size:13px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><b>${esc(c.author)}</b><small style="color:var(--muted)">${new Date(c.at).toLocaleString()}</small></div><p style="margin:0">${esc(c.text)}</p></div>`).join("")}</div>` : `<p style="color:var(--muted);font-size:13px">No comments yet. Start the conversation!</p>`}
+          </div>
         </div>
       </div>
 
@@ -333,6 +341,41 @@ async function pageMeeting(id) {
     clearTimeout(nt);
     nt = setTimeout(() => api("/api/meetings/" + m.id, { method: "PATCH", body: JSON.stringify({ notes: e.target.value }) }), 700);
   });
+
+  // Comment submission
+  const commentForm = $("#comment-form");
+  if (commentForm) {
+    commentForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = $("#comment-text");
+      const text = input.value.trim();
+      if (!text) return;
+      try {
+        const result = await api("/api/meetings/" + m.id + "/comments", {
+          method: "POST",
+          body: JSON.stringify({ text, author: "Me" }),
+        });
+        m.comments = result.comments || [];
+        input.value = "";
+        // Refresh the comments display
+        const commentsDiv = document.querySelectorAll("[id='tab-notes']")[0].querySelector("div:last-child");
+        if (commentsDiv) {
+          commentsDiv.innerHTML = `<h3 style="margin:0 0 12px;font-size:15px;font-weight:600">💬 Comments</h3>
+            <form id="comment-form" style="display:flex;gap:8px;margin-bottom:16px">
+              <input type="text" id="comment-text" placeholder="Add a comment…" style="flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-size:14px">
+              <button type="submit" class="btn primary" style="padding:8px 16px">Post</button>
+            </form>
+            <div style="display:flex;flex-direction:column;gap:12px">${m.comments.map((c) => `<div style="padding:10px;background:var(--soft);border-radius:6px;font-size:13px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><b>${esc(c.author)}</b><small style="color:var(--muted)">${new Date(c.at).toLocaleString()}</small></div><p style="margin:0">${esc(c.text)}</p></div>`).join("")}</div>`;
+          // Re-attach the comment form handler
+          const newForm = document.querySelectorAll("[id='tab-notes']")[0].querySelector("#comment-form");
+          if (newForm) newForm.addEventListener("submit", arguments.callee);
+        }
+        toast("Comment added");
+      } catch (err) {
+        toast("Error posting comment");
+      }
+    });
+  }
 
   // Transcript filters
   ["tq", "spk", "onlyhl"].forEach((x) => $("#" + x).addEventListener("input", renderLines));
@@ -786,6 +829,15 @@ async function pageSettings() {
       <p>Recording upload: ${env.upload ? `<span class="chip green">On · ${esc(env.upload)}</span>` : `<span class="chip gold">Off — add DEEPGRAM_API_KEY or OPENAI_API_KEY</span>`}</p>
       <label class="check"><input type="checkbox" id="auto" ${s.autoSummary ? "checked" : ""}> Make an AI summary by itself when a meeting ends</label>
 
+      <h3 style="margin-top:26px">Google Calendar</h3>
+      <div id="calendar-status" style="margin-bottom:16px;padding:12px;background:var(--soft);border-radius:6px;border-left:3px solid var(--primary)">
+        <div style="color:var(--muted);font-size:12px;margin-bottom:4px">Calendar sync status</div>
+        <div id="calendar-state" style="font-weight:600">Not connected</div>
+        ${s.googleCalendarId ? `<button class="btn" style="margin-top:8px;font-size:12px" id="disconnect-calendar">Disconnect</button>` : `<button class="btn primary" style="margin-top:8px;font-size:12px" id="connect-calendar">Connect to Google Calendar</button>`}
+      </div>
+      <label class="check"><input type="checkbox" id="auto-calendar" ${s.autoCalendar ? "checked" : ""}> Automatically add meetings to Google Calendar</label>
+      <div class="help">When enabled, meetings will be created in your Google Calendar automatically.</div>
+
       <h3 style="margin-top:26px">Send notes to other apps</h3>
       <label>Slack incoming webhook</label>
       <input type="url" id="slack" value="${esc(s.slackWebhook || "")}" placeholder="https://hooks.slack.com/services/…">
@@ -805,12 +857,58 @@ async function pageSettings() {
   let theme = "";
   try { theme = localStorage.getItem("fn-theme") || ""; } catch {}
   $("#theme").value = theme;
+
+  // Update calendar status display
+  if (s.googleCalendarId) {
+    $("#calendar-state").textContent = "✓ Connected";
+    $("#calendar-state").style.color = "var(--primary)";
+  }
+
+  // Google Calendar connect
+  const connectBtn = $("#connect-calendar");
+  if (connectBtn) {
+    connectBtn.onclick = async () => {
+      try {
+        const { authUrl } = await api("/api/calendar/auth-url");
+        window.open(authUrl, "calendar_auth", "width=500,height=600");
+        // Check for connection after a delay
+        setTimeout(() => location.reload(), 3000);
+      } catch (e) {
+        toast("Error: " + e.message);
+      }
+    };
+  }
+
+  // Google Calendar disconnect
+  const disconnectBtn = $("#disconnect-calendar");
+  if (disconnectBtn) {
+    disconnectBtn.onclick = async () => {
+      if (confirm("Disconnect from Google Calendar?")) {
+        try {
+          await api("/api/calendar/disconnect", { method: "POST" });
+          toast("Disconnected");
+          location.reload();
+        } catch (e) {
+          toast("Error: " + e.message);
+        }
+      }
+    };
+  }
+
   $("#save").onclick = async () => {
     setKey($("#key").value.trim());
     try { localStorage.setItem("fn-theme", $("#theme").value); } catch {}
     applyTheme();
     try {
-      await api("/api/settings", { method: "PUT", body: JSON.stringify({ slackWebhook: $("#slack").value.trim(), webhookUrl: $("#hook").value.trim(), autoSummary: $("#auto").checked }) });
+      await api("/api/settings", {
+        method: "PUT",
+        body: JSON.stringify({
+          slackWebhook: $("#slack").value.trim(),
+          webhookUrl: $("#hook").value.trim(),
+          autoSummary: $("#auto").checked,
+          autoCalendar: $("#auto-calendar").checked
+        })
+      });
       toast("Saved ✓");
     } catch (e) {
       toast(e.message);

@@ -19,6 +19,9 @@ const ANTHROPIC_BASE_URL = (process.env.ANTHROPIC_BASE_URL || "https://api.anthr
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || "";
 const DEEPGRAM_MODEL = process.env.DEEPGRAM_MODEL || "nova-3";
+const GOOGLE_CALENDAR_CLIENT_ID = process.env.GOOGLE_CALENDAR_CLIENT_ID || "";
+const GOOGLE_CALENDAR_CLIENT_SECRET = process.env.GOOGLE_CALENDAR_CLIENT_SECRET || "";
+const GOOGLE_CALENDAR_REDIRECT_URI = process.env.GOOGLE_CALENDAR_REDIRECT_URI || "http://localhost:8787/api/calendar/callback";
 const DATA = path.resolve(process.env.MAJLIS_DATA || path.join(__dirname, "data"));
 const PUBLIC = path.join(__dirname, "public");
 const MAX_UPLOAD = 200 * 1024 * 1024;
@@ -115,7 +118,8 @@ async function getPrompts() {
   return [...BUILTIN_PROMPTS.map((p) => ({ ...p, builtin: true })), ...custom];
 }
 const getShares = () => readJSON(path.join(DATA, "shares.json"), {});
-const getSettings = () => readJSON(path.join(DATA, "settings.json"), { slackWebhook: "", webhookUrl: "", autoSummary: true, language: "auto" });
+const getSettings = () => readJSON(path.join(DATA, "settings.json"), { slackWebhook: "", webhookUrl: "", autoSummary: true, autoCalendar: false, language: "auto" });
+const saveSettings = (s) => writeJSON(path.join(DATA, "settings.json"), s);
 const getSpaces = () => readJSON(path.join(DATA, "spaces.json"), { default: { id: "default", name: "My Meetings", description: "", color: "#6366f1" } });
 const saveSpaces = (s) => writeJSON(path.join(DATA, "spaces.json"), s);
 
@@ -384,6 +388,62 @@ async function onMeetingEnded(m) {
     await runPrompt(m, { promptId: "summary" });
   }
   if (s.slackWebhook || s.webhookUrl) await pushIntegrations(await getMeeting(m.id));
+  if (s.autoCalendar && s.googleCalendarAccessToken) {
+    await createCalendarEvent(m, s).catch((e) => console.error("calendar sync:", e.message));
+  }
+}
+
+async function createCalendarEvent(m, s) {
+  if (!s.googleCalendarAccessToken) return;
+  const dur = m.endedAt ? new Date(m.endedAt) - new Date(m.startedAt) : (m.entries[m.entries.length - 1] || {}).t || 0;
+  const startTime = new Date(m.startedAt);
+  const endTime = new Date(startTime.getTime() + dur);
+
+  const event = {
+    summary: m.title || "Meeting",
+    description: m.notes || "",
+    start: { dateTime: startTime.toISOString(), timeZone: "UTC" },
+    end: { dateTime: endTime.toISOString(), timeZone: "UTC" },
+    attendees: (m.participants || []).map((p) => ({ email: "", displayName: p })),
+  };
+
+  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${s.googleCalendarId}/events`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + s.googleCalendarAccessToken,
+    },
+    body: JSON.stringify(event),
+  });
+
+  if (!res.ok) {
+    const data = await res.json();
+    if (data.error?.code === 401) {
+      // Token expired, try to refresh
+      await refreshGoogleToken(s);
+    } else {
+      throw new Error(data.error?.message || "Failed to create calendar event");
+    }
+  }
+}
+
+async function refreshGoogleToken(s) {
+  if (!s.googleCalendarRefreshToken || !GOOGLE_CALENDAR_CLIENT_ID || !GOOGLE_CALENDAR_CLIENT_SECRET) return;
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: GOOGLE_CALENDAR_CLIENT_ID,
+      client_secret: GOOGLE_CALENDAR_CLIENT_SECRET,
+      refresh_token: s.googleCalendarRefreshToken,
+      grant_type: "refresh_token",
+    }).toString(),
+  });
+  const data = await res.json();
+  if (data.access_token) {
+    s.googleCalendarAccessToken = data.access_token;
+    await saveSettings(s);
+  }
 }
 
 route("GET", "/api/meetings/:id", async (req, p) => {
@@ -610,7 +670,8 @@ route("PUT", "/api/settings", async (req) => {
     s[k] = b[k].trim();
   }
   if (typeof b.autoSummary === "boolean") s.autoSummary = b.autoSummary;
-  await writeJSON(path.join(DATA, "settings.json"), s);
+  if (typeof b.autoCalendar === "boolean") s.autoCalendar = b.autoCalendar;
+  await saveSettings(s);
   return { settings: s };
 });
 
@@ -660,6 +721,67 @@ route("DELETE", "/api/spaces/:id", async (req, p) => {
   const all = await listMeetings();
   for (const m of all) if (m.spaceId === p.id) { m.spaceId = "default"; await saveMeeting(m); }
   await saveSpaces(spaces);
+  return { ok: true };
+});
+
+/* Google Calendar Integration */
+route("GET", "/api/calendar/auth-url", async () => {
+  if (!GOOGLE_CALENDAR_CLIENT_ID) throw httpError(400, "Google Calendar not configured");
+  const state = crypto.randomBytes(16).toString("hex");
+  const settings = await getSettings();
+  settings.calendarAuthState = state;
+  await saveSettings(settings);
+  const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  authUrl.searchParams.set("client_id", GOOGLE_CALENDAR_CLIENT_ID);
+  authUrl.searchParams.set("redirect_uri", GOOGLE_CALENDAR_REDIRECT_URI);
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("scope", "https://www.googleapis.com/auth/calendar");
+  authUrl.searchParams.set("state", state);
+  authUrl.searchParams.set("access_type", "offline");
+  return { authUrl: authUrl.toString() };
+});
+
+route("GET", "/api/calendar/callback", async (req, p, url) => {
+  if (!GOOGLE_CALENDAR_CLIENT_ID) throw httpError(400, "Google Calendar not configured");
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+  if (!code) throw httpError(400, "No authorization code");
+  const settings = await getSettings();
+  if (!settings.calendarAuthState || settings.calendarAuthState !== state) throw httpError(400, "Invalid state");
+
+  // Exchange code for tokens
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: GOOGLE_CALENDAR_CLIENT_ID,
+      client_secret: GOOGLE_CALENDAR_CLIENT_SECRET,
+      code,
+      grant_type: "authorization_code",
+      redirect_uri: GOOGLE_CALENDAR_REDIRECT_URI,
+    }).toString(),
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenRes.ok) throw httpError(400, "Failed to get tokens: " + (tokenData.error || "unknown"));
+
+  settings.googleCalendarAccessToken = tokenData.access_token;
+  settings.googleCalendarRefreshToken = tokenData.refresh_token;
+  settings.googleCalendarId = "primary"; // Default calendar
+  delete settings.calendarAuthState;
+  await saveSettings(settings);
+
+  return {
+    __html: true,
+    body: `<html><head><title>Connected</title><script>window.location='/#/settings'</script></head><body>Connected to Google Calendar. Redirecting...</body></html>`,
+  };
+});
+
+route("POST", "/api/calendar/disconnect", async () => {
+  const settings = await getSettings();
+  delete settings.googleCalendarAccessToken;
+  delete settings.googleCalendarRefreshToken;
+  delete settings.googleCalendarId;
+  await saveSettings(settings);
   return { ok: true };
 });
 
