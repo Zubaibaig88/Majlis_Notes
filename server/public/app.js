@@ -170,24 +170,31 @@ async function loadList() {
     .map(
       ([g, ms]) => `<div class="group-title">${esc(g)}</div><div class="mlist">${ms
         .map(
-          (m) => `<a class="mrow" href="#/m/${m.id}">
-          <div>
-            <div class="t">${mark(m.title || "Untitled meeting")}</div>
-            <div class="meta">
-              <span>${new Date(m.startedAt).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}</span>
-              <span>⏱ ${fmtDuration(m.durationMs)}</span>
-              <span>${esc(m.platformName || "")}</span>
-              <span>${m.lines} lines</span>
-              ${m.hasSummary ? `<span class="chip green">✦ Summary</span>` : ""}
-              ${m.highlights ? `<span class="chip gold">★ ${m.highlights}</span>` : ""}
-              ${m.shareId ? `<span class="chip">🔗 Shared</span>` : ""}
-              ${m.folder ? `<span class="chip">📁 ${esc(m.folder)}</span>` : ""}
-              ${m.tags.map((t) => `<span class="chip"># ${esc(t)}</span>`).join("")}
-            </div>
-            ${m.hit && m.hit.line ? `<div class="hit"><b>${esc(m.hit.speaker)}</b> · ${fmtOffset(m.hit.t)} — ${mark(m.hit.line)}</div>` : ""}
-          </div>
-          <div class="avatars">${m.speakers.slice(0, 5).map(avatar).join("")}${m.speakers.length > 5 ? `<span class="av" style="background:#8a93a6">+${m.speakers.length - 5}</span>` : ""}</div>
-        </a>`
+          (m) => {
+            const dur = fmtDuration(m.durationMs);
+            const durMins = Math.round(m.durationMs / 60000);
+            return `<a class="mrow" href="#/m/${m.id}">
+              <div class="left">
+                <div class="badge">${durMins}m</div>
+                <div class="info">
+                  <div class="t">${mark(m.title || "Untitled meeting")}</div>
+                  <div class="meta">
+                    <span>${new Date(m.startedAt).toLocaleString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span>${m.platformName || "Meeting"}</span>
+                    <span>${m.lines} lines</span>
+                  </div>
+                  <div class="attendees">
+                    <span class="avatars">${m.speakers.slice(0, 4).map(avatar).join("")}${m.speakers.length > 4 ? `<span class="av" style="background:#cbd5e1">+${m.speakers.length - 4}</span>` : ""}</span>
+                    ${m.hasSummary ? `<span class="chip green">✦</span>` : ""}
+                    ${m.highlights ? `<span class="chip">${m.highlights} ★</span>` : ""}
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                ${m.shareId ? `<span style="color:var(--muted);font-size:12px">🔗</span>` : ""}
+              </div>
+            </a>`;
+          }
         )
         .join("")}</div>`
     )
