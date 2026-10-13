@@ -99,9 +99,32 @@ async function loadSidebar() {
   // Spaces
   const spacesList = Object.values(s.spaces || {});
   if ($("#spaces")) {
-    $("#spaces").innerHTML = spacesList.length
+    const spacesHTML = (spacesList.length
       ? spacesList.map((sp) => `<span class="chip ${state.space === sp.id ? "on" : ""}" data-space="${esc(sp.id)}" title="${esc(sp.description || "")}">📂 ${esc(sp.name)}</span>`).join("")
-      : `<span style="padding:0 10px;font-size:12px;color:#8f9ab4">No spaces yet</span>`;
+      : `<span style="padding:0 10px;font-size:12px;color:#8f9ab4">No spaces yet</span>`) +
+      `<button class="btn sm" id="create-space-btn" style="margin-top:8px;width:100%;font-size:12px;padding:6px">+ Create space</button>`;
+    $("#spaces").innerHTML = spacesHTML;
+
+    // Create space button handler
+    const createBtn = $("#create-space-btn");
+    if (createBtn) {
+      createBtn.onclick = async () => {
+        const name = prompt("Space name (e.g., 'Client Calls')");
+        if (!name) return;
+        const desc = prompt("Description (optional)", "");
+        try {
+          await api("/api/spaces", {
+            method: "POST",
+            body: JSON.stringify({ name: name.trim(), description: desc.trim() }),
+          });
+          toast("Space created");
+          loadSidebar();
+          pageHome();
+        } catch (e) {
+          toast("Error: " + e.message);
+        }
+      };
+    }
   }
 
   // Folders
