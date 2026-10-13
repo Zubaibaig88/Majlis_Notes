@@ -204,67 +204,118 @@ async function loadList() {
 /* ---------------- Meeting ---------------- */
 async function pageMeeting(id) {
   view.innerHTML = loading();
-  const [{ meeting: m }, { prompts }] = await Promise.all([api("/api/meetings/" + id), api("/api/prompts"), loadSidebar()]);
+  const [{ meeting: m }, { prompts }, spaces] = await Promise.all([api("/api/meetings/" + id), api("/api/prompts"), api("/api/spaces"), loadSidebar()]);
   state.current = m;
   state.prompts = prompts;
   const stats = speakerStats(m.entries);
   const dur = m.endedAt ? new Date(m.endedAt) - new Date(m.startedAt) : (m.entries[m.entries.length - 1] || {}).t || 0;
+  const currentSpace = (spaces || []).find((s) => s.id === (m.spaceId || "default")) || { id: "default", name: "My Meetings" };
 
   view.innerHTML = `
-    <div class="mhead">
-      <a href="#/" class="btn sm" style="margin-bottom:10px">← All meetings</a>
-      <h1 contenteditable="true" spellcheck="false" id="title">${esc(m.title || "Untitled meeting")}</h1>
-      <div class="meta">
-        <span>📅 ${new Date(m.startedAt).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" })}</span>
-        <span>⏱ ${fmtDuration(dur)}</span>
-        <span>${esc(m.platformName || "")}</span>
-        <span>👥 ${esc((m.participants && m.participants.length ? m.participants : stats.map((s) => s.speaker)).join(", ") || "—")}</span>
-        ${m.url ? `<a href="${esc(m.url)}" target="_blank" rel="noopener">Meeting link ↗</a>` : ""}
-      </div>
-      <div class="tagbox" id="tagbox"></div>
-      <div class="actions">
-        <button class="btn primary" id="share">🔗 ${m.shareId ? "Shared link" : "Share"}</button>
-        <button class="btn" id="export">⬇ Export</button>
-        <button class="btn" id="copy">⧉ Copy transcript</button>
-        <button class="btn" id="push">➤ Send to…</button>
-        <button class="btn" id="folder">📁 ${m.folder ? esc(m.folder) : "Move to folder"}</button>
-        <button class="btn danger" id="del">Delete</button>
-      </div>
-    </div>
-    <div class="grid2">
-      <div class="card tr">
-        <div class="trbar">
-          <input type="search" id="tq" placeholder="Search in this transcript…">
-          <select id="spk"><option value="">All speakers</option>${stats.map((s) => `<option>${esc(s.speaker)}</option>`).join("")}</select>
-          <label class="chip"><input type="checkbox" id="onlyhl"> ★ Highlights only</label>
+    <div class="mpage">
+      <div class="mpage-main">
+        <div class="mpage-head">
+          <a href="#/" class="btn sm" style="margin-bottom:10px">← All meetings</a>
+          <h1 contenteditable="true" spellcheck="false" id="title">${esc(m.title || "Untitled meeting")}</h1>
+          <div class="meta">
+            <span>📅 ${new Date(m.startedAt).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" })}</span>
+            <span>⏱ ${fmtDuration(dur)}</span>
+            <span>${esc(m.platformName || "")}</span>
+          </div>
+          <div class="tagbox" id="tagbox"></div>
+          <div class="actions">
+            <button class="btn primary" id="share">🔗 ${m.shareId ? "Shared link" : "Share"}</button>
+            <button class="btn" id="export">⬇ Export</button>
+            <button class="btn" id="copy">⧉ Copy transcript</button>
+            <button class="btn" id="push">➤ Send to…</button>
+            <button class="btn" id="folder">📁 ${m.folder ? esc(m.folder) : "Move to folder"}</button>
+            <button class="btn danger" id="del">Delete</button>
+          </div>
         </div>
-        <div class="lines" id="lines"></div>
-      </div>
-      <div class="side-col">
-        <div class="card">
-          <h3>✦ AI notes</h3>
-          <div class="prompts" id="prompts">${prompts.map((p) => `<button class="btn" data-p="${esc(p.id)}" title="${esc(p.text.slice(0, 200))}">${esc(p.icon || "◆")} ${esc(p.name)}</button>`).join("")}</div>
-          <form class="ask" id="ask"><input placeholder="Ask anything about this meeting…"><button class="btn primary">Ask</button></form>
+
+        <div class="tabs">
+          <button class="tab on" data-tab="transcript">📝 Transcript</button>
+          <button class="tab" data-tab="ai">✦ AI</button>
+          <button class="tab" data-tab="notes">💬 Notes & Comments</button>
+        </div>
+
+        <div class="tab-content" id="tab-transcript">
+          <div class="trbar">
+            <input type="search" id="tq" placeholder="Search in this transcript…">
+            <select id="spk"><option value="">All speakers</option>${stats.map((s) => `<option>${esc(s.speaker)}</option>`).join("")}</select>
+            <label class="chip"><input type="checkbox" id="onlyhl"> ★ Highlights only</label>
+          </div>
+          <div class="lines" id="lines"></div>
+        </div>
+
+        <div class="tab-content" id="tab-ai" style="display:none">
+          <div style="margin-bottom:16px">
+            <h3 style="margin:0 0 12px;font-size:15px;font-weight:600">Ask AI about this meeting</h3>
+            <div class="prompts" id="prompts">${prompts.map((p) => `<button class="btn" data-p="${esc(p.id)}" title="${esc(p.text.slice(0, 200))}">${esc(p.icon || "◆")} ${esc(p.name)}</button>`).join("")}</div>
+            <form class="ask" id="ask"><input placeholder="Ask anything about this meeting…"><button class="btn primary">Ask</button></form>
+          </div>
           <div id="ai"></div>
         </div>
-        <div class="card">
-          <h3>👥 Who talked most</h3>
-          <div class="bars">${stats.length ? stats.map((s) => `<div class="row"><span title="${s.turns} turns · ${s.words} words">${esc(s.speaker)}</span><div class="bar"><i style="width:${s.pct}%;background:${colorFor(s.speaker)}"></i></div><span class="pct">${s.pct}%</span></div>`).join("") : `<span class="help">No speech yet.</span>`}</div>
-          <div class="help" style="margin-top:8px;color:var(--muted);font-size:12.5px">Tip: click a speaker name in the transcript to rename them everywhere.</div>
+
+        <div class="tab-content" id="tab-notes" style="display:none">
+          <h3 style="margin:0 0 12px;font-size:15px;font-weight:600">📝 My Notes</h3>
+          <textarea class="notes" id="notes" placeholder="Private notes — the AI reads these too." style="width:100%;min-height:120px;padding:10px;border:1px solid var(--line);border-radius:6px;font-family:inherit;font-size:14px;resize:vertical">${esc(m.notes || "")}</textarea>
+          ${(m.comments || []).length ? `<div style="margin-top:20px"><h3 style="margin:0 0 12px;font-size:15px;font-weight:600">💬 Comments</h3><div style="display:flex;flex-direction:column;gap:12px">${m.comments.map((c) => `<div style="padding:10px;background:var(--soft);border-radius:6px;font-size:13px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><b>${esc(c.author)}</b><small style="color:var(--muted)">${new Date(c.at).toLocaleString()}</small></div><p style="margin:0">${esc(c.text)}</p></div>`).join("")}</div></div>` : ""}
         </div>
-        <div class="card">
-          <h3>📝 My notes</h3>
-          <textarea class="notes" id="notes" placeholder="Private notes — the AI reads these too.">${esc(m.notes || "")}</textarea>
+      </div>
+
+      <div class="mpage-side">
+        <div class="panel">
+          <h6>Meeting info</h6>
+          <div class="info-row">
+            <b>Participants</b>
+            <div style="flex:1">
+              <div class="participants">
+                ${(m.participants && m.participants.length ? m.participants : stats.map((s) => s.speaker)).map((p) => avatar(p)).join("")}
+              </div>
+              <div style="font-size:12px;color:var(--muted);margin-top:6px">${esc((m.participants && m.participants.length ? m.participants : stats.map((s) => s.speaker)).join(", ") || "—")}</div>
+            </div>
+          </div>
+          <div class="info-row">
+            <b>Platform</b>
+            <span>${esc(m.platformName || "—")}</span>
+          </div>
+          ${m.url ? `<div class="info-row"><b>Link</b><a href="${esc(m.url)}" target="_blank" rel="noopener" style="color:var(--primary);text-decoration:none;font-size:12px">Open meeting ↗</a></div>` : ""}
         </div>
-        ${(m.comments || []).filter((c) => !c.entryId).length ? `<div class="card"><h3>💬 Comments</h3>${m.comments.filter((c) => !c.entryId).map((c) => `<p><b>${esc(c.author)}</b> · <small>${new Date(c.at).toLocaleString()}</small><br>${esc(c.text)}</p>`).join("")}</div>` : ""}
+
+        <div class="panel">
+          <h6>Organization</h6>
+          <div class="space-selector" id="space-selector">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Current space</div>
+            <div style="font-weight:600;color:var(--ink)">${esc(currentSpace.name)}</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h6>Stats</h6>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            ${stats.length ? stats.slice(0, 5).map((s) => `<div class="info-row" style="margin-bottom:0"><b>${esc(s.speaker)}</b><span style="flex:1;text-align:right;color:var(--muted);font-size:12px">${s.pct}%</span></div>`).join("") : `<span class="help">No speech yet.</span>`}
+          </div>
+        </div>
       </div>
     </div>`;
 
+  // Render content
   renderTags();
   renderLines();
   renderAI();
 
-  /* title */
+  // Tab switching
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach((t) => t.classList.remove("on"));
+      tab.classList.add("on");
+      document.querySelectorAll("[id^='tab-']").forEach((t) => (t.style.display = "none"));
+      $("#tab-" + tab.dataset.tab).style.display = "block";
+    });
+  });
+
+  // Title editing
   const title = $("#title");
   title.addEventListener("keydown", (e) => e.key === "Enter" && (e.preventDefault(), title.blur()));
   title.addEventListener("blur", async () => {
@@ -276,17 +327,17 @@ async function pageMeeting(id) {
     }
   });
 
-  /* notes autosave */
+  // Notes autosave
   let nt;
   $("#notes").addEventListener("input", (e) => {
     clearTimeout(nt);
     nt = setTimeout(() => api("/api/meetings/" + m.id, { method: "PATCH", body: JSON.stringify({ notes: e.target.value }) }), 700);
   });
 
-  /* transcript filters */
+  // Transcript filters
   ["tq", "spk", "onlyhl"].forEach((x) => $("#" + x).addEventListener("input", renderLines));
 
-  /* AI */
+  // AI prompts
   $("#prompts").addEventListener("click", (e) => {
     const b = e.target.closest("[data-p]");
     if (b) runAI({ promptId: b.dataset.p }, b.textContent.trim());
@@ -298,7 +349,7 @@ async function pageMeeting(id) {
     inp.value = "";
   });
 
-  /* actions */
+  // Action handlers
   $("#copy").onclick = async () => {
     await navigator.clipboard.writeText(m.entries.map((e) => `[${fmtOffset(e.t)}] ${e.speaker}: ${e.text}`).join("\n"));
     toast("Transcript copied");
@@ -327,6 +378,37 @@ async function pageMeeting(id) {
     $("#folder").textContent = "📁 " + (m.folder || "Move to folder");
     loadSidebar();
   };
+
+  // Space selector
+  $("#space-selector").onclick = async () => {
+    const spaceList = spaces || [];
+    const modal = document.createElement("div");
+    modal.className = "modal";
+    modal.innerHTML = `<div class="box" style="max-width:400px">
+      <h3>Select a space</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;margin:16px 0">
+        ${spaceList.map((s) => `<button class="btn ${m.spaceId === s.id ? "primary" : ""}" data-space-id="${esc(s.id)}" style="text-align:left;background:${s.id === (m.spaceId || "default") ? "var(--primary)" : "var(--line)"};color:${s.id === (m.spaceId || "default") ? "#fff" : "var(--ink)"}">
+          <strong>${esc(s.name)}</strong>
+          ${s.description ? `<div style="font-size:12px;opacity:0.8">${esc(s.description)}</div>` : ""}
+        </button>`).join("")}
+      </div>
+      <div style="text-align:right"><button class="btn" id="close-space-modal">Close</button></div>
+    </div>`;
+    document.body.appendChild(modal);
+    modal.querySelectorAll("[data-space-id]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await api("/api/meetings/" + m.id, { method: "PATCH", body: JSON.stringify({ spaceId: btn.dataset.spaceId }) });
+        m.spaceId = btn.dataset.spaceId;
+        toast("Space updated");
+        modal.remove();
+        // Refresh the space info
+        const newSpace = spaceList.find((s) => s.id === m.spaceId) || { id: "default", name: "My Meetings" };
+        $("#space-selector").innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Current space</div><div style="font-weight:600;color:var(--ink)">${esc(newSpace.name)}</div>`;
+      });
+    });
+    $("#close-space-modal").onclick = () => modal.remove();
+  };
+
   $("#del").onclick = async () => {
     if (!confirm("Delete this meeting for good? This cannot be undone.")) return;
     await api("/api/meetings/" + m.id, { method: "DELETE" });
