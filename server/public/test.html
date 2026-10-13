@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Majlis Notes - Diagnostic Test</title>
+<style>
+body { font: 14px sans-serif; padding: 40px; background: #f5f5f5; }
+.test { background: white; margin: 20px 0; padding: 20px; border-radius: 8px; border-left: 4px solid #ccc; }
+.test.pass { border-left-color: #10b981; }
+.test.fail { border-left-color: #ef4444; }
+.test b { display: block; margin-bottom: 8px; }
+.test code { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>🔧 Majlis Notes Diagnostic</h1>
+
+<div id="tests"></div>
+
+<script>
+const tests = [];
+
+function test(name, fn) {
+  tests.push({ name, fn });
+}
+
+// Test 1: Can we access localStorage?
+test("LocalStorage", () => {
+  try {
+    localStorage.setItem("test", "1");
+    localStorage.removeItem("test");
+    return { pass: true, msg: "LocalStorage working" };
+  } catch (e) {
+    return { pass: false, msg: "LocalStorage error: " + e.message };
+  }
+});
+
+// Test 2: Can we fetch the API?
+test("API Fetch", async () => {
+  try {
+    const res = await fetch("/api/stats", {
+      headers: { "x-majlis-token": "zubair-majlis-2026-k7x9" }
+    });
+    const data = await res.json();
+    if (res.ok) {
+      return { pass: true, msg: "API working. Found " + data.meetings + " meetings." };
+    } else {
+      return { pass: false, msg: "API error: " + data.error };
+    }
+  } catch (e) {
+    return { pass: false, msg: "Fetch error: " + e.message };
+  }
+});
+
+// Test 3: Check if common.js loaded
+test("Common.js", () => {
+  if (typeof FN === "undefined") {
+    return { pass: false, msg: "FN object not found - common.js didn't load" };
+  }
+  return { pass: true, msg: "common.js loaded, FN object found" };
+});
+
+// Test 4: Check DOM elements
+test("DOM Elements", () => {
+  const view = document.getElementById("view");
+  const side = document.querySelector(".side");
+  const app = document.querySelector(".app");
+  if (!view || !side || !app) {
+    return { pass: false, msg: "Missing DOM elements" };
+  }
+  return { pass: true, msg: "All main DOM elements present" };
+});
+
+// Run tests
+(async () => {
+  const resultsDiv = document.getElementById("tests");
+  for (const t of tests) {
+    const result = await Promise.resolve(t.fn());
+    const el = document.createElement("div");
+    el.className = "test " + (result.pass ? "pass" : "fail");
+    el.innerHTML = `<b>${result.pass ? "✓" : "✗"} ${t.name}</b>${result.msg}`;
+    resultsDiv.appendChild(el);
+  }
+})();
+</script>
+</head>
+</body>
+</html>
